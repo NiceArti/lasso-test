@@ -6,6 +6,62 @@ This project was developed **as part of a technical assessment for LASSO** and i
 
 ---
 
+## 🚀 Installation (Local Development)
+
+This extension is distributed as a prebuilt bundle and must be loaded manually in the browser.
+
+### Prerequisites
+
+- A Chromium-based browser (Chrome, Edge, Brave, Opera)
+- Built project output (`dist/` folder)
+
+---
+
+### Step-by-step Installation
+
+1. **Build the extension**
+
+Make sure the project is built and the `dist/` directory exists:
+
+```bash
+npm install
+npm run build
+```
+
+After a successful build, you should see a `dist/` folder containing:
+
+```bash
+dist/
+  content-scripts.js
+  index.html
+  manifest.json (v3)
+  page-script.js
+  popup.js
+```
+
+
+2. **Open the Extensions page**
+
+In your browser, navigate to: `chrome://extensions`
+
+3. **Enable Developer mode**
+
+4. **Load the extension**
+
+Click “Load unpacked” and select the dist/ folder of this project.
+
+
+⚠️ Important:
+Make sure you select the folder itself, not a file inside it.
+
+
+5. **Verify installation**
+
+- The extension should now appear in the extensions list
+- Pin it from the toolbar if needed
+- Open https://chatgpt.com to test functionality
+
+
 ## ✨ Features
 
 - 🔍 **Email Detection**  
