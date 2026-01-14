@@ -1,4 +1,4 @@
-import type { LassoEmailDetails } from "@/lib/types";
+import type { IssueHistoryItem, LassoEmailDetails } from "@/lib/types";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 export const STORAGE_KEY = "issues";
@@ -6,21 +6,15 @@ export const STORAGE_KEY = "issues";
 export const DISMISSED_EMAIL_KEY = "dismissed_email";
 export const DISMISSED_EMAIL_TTL = 24 * 60 * 60 * 1000; // 24h
 
-export type IssueHistoryItem = {
-    id: string;
-    timestamp: number;
-    originalText: string;
-    modifiedText: string;
-    emails: string[];
-    dismissTimestamp?: number;
-};
-
 type IssuesContextValue = {
     text: string;
     setText: React.Dispatch<React.SetStateAction<string>>;
 
     emails: string[];
     setEmails: React.Dispatch<React.SetStateAction<string[]>>;
+
+    dismissedEmails: { email: string, deadline: number }[];
+    setDismissedEmails: React.Dispatch<React.SetStateAction<{ email: string, deadline: number }[]>>;
 
     history: IssueHistoryItem[];
     setHistory: React.Dispatch<
@@ -37,6 +31,7 @@ export const AppProvider: React.FC<{
 }> = ({ children }) => {
     const [text, setText] = useState<string>("");
     const [emails, setEmails] = useState<string[]>([]);
+    const [dismissedEmails, setDismissedEmails] = useState<{ email: string, deadline: number }[]>([]);
     const [history, setHistory] = useState<IssueHistoryItem[]>([]);
 
     useEffect(() => {
@@ -96,38 +91,63 @@ export const AppProvider: React.FC<{
         chrome.storage.local.get(
             [STORAGE_KEY, DISMISSED_EMAIL_KEY],
             (result) => {
-                const issues = Array.isArray(result.issues)
-                    ? result.issues
+                const issues = Array.isArray(result[STORAGE_KEY])
+                    ? result[STORAGE_KEY] as IssueHistoryItem[]
                     : [];
 
+                    console.log(issues)
 
-                // @ts-ignore
-                const dismissedMap: Record<string, number> =
-                    result[DISMISSED_EMAIL_KEY] ?? {};
+                const rawDismissedMap =
+                    (result[DISMISSED_EMAIL_KEY] as Record<string, number> | undefined) ?? {};
 
                 const now = Date.now();
 
-                const hydrated = issues.map((issue) => {
-                    const activeDismissUntil = issue.emails
-                        .map((email: string) => dismissedMap[email])
-                        .find(
-                            (until: number) =>
-                                typeof until === "number" && until > now
-                        );
-
-                    if (activeDismissUntil) {
-                        return {
-                            ...issue,
-                            dismissTimestamp: activeDismissUntil,
-                        };
+                // ✅ Нормализуем dismissedMap (ключи приводим к lower+trim)
+                const dismissedMap: Record<string, number> = {};
+                for (const [email, deadline] of Object.entries(rawDismissedMap)) {
+                    const normalized = email.toLowerCase().trim();
+                    const numDeadline = Number(deadline);
+                    if (!Number.isNaN(numDeadline)) {
+                        dismissedMap[normalized] = numDeadline;
                     }
+                }
 
-                    return issue;
-                });
+                // ✅ глобальный dismissedEmails (активные)
+                const validDismissedEmails = Object.entries(dismissedMap)
+                    .filter(([_, deadline]) => deadline > now)
+                    .map(([email, deadline]) => ({ email, deadline }));
 
-                hydrated.sort(
-                    (a, b) => b.timestamp - a.timestamp
-                );
+                setDismissedEmails(validDismissedEmails);
+
+                // ✅ гидратация history: добавляем dismissedEmails на основе нормализованного lookup
+                const hydrated: IssueHistoryItem[] = [];
+
+                for (const issue of issues) {
+                    const issueDismissedEmails: { email: string; deadline: number }[] = [];
+                    for(const email of issue.emails) {
+                        const normalized = email.toLowerCase().trim();
+                        const deadline = dismissedMap[normalized];
+
+                        if (typeof deadline === "number" && deadline > now) {
+                            issueDismissedEmails.push({ email, deadline });
+                        }
+                    }
+                    
+                    // собираем issue
+                    if (issueDismissedEmails.length > 0) {
+                        hydrated.push({
+                            ...issue,
+                            emails: issue.emails ?? [],
+                            dismissedEmails: issueDismissedEmails,
+                        });
+                    } else {
+                        hydrated.push({
+                            ...issue,
+                        });
+                    }
+                }
+
+                hydrated.sort((a, b) => b.timestamp - a.timestamp);
 
                 setHistory(hydrated);
             }
@@ -135,15 +155,23 @@ export const AppProvider: React.FC<{
     }, []);
 
 
+
+
+
     return (
         <AppContext.Provider
             value={{
                 text,
                 setText,
+
                 emails,
                 setEmails,
+
                 history,
                 setHistory,
+
+                dismissedEmails,
+                setDismissedEmails,
             }}
         >
             {children}

@@ -4,7 +4,7 @@ export type IssueHistoryItem = {
     originalText: string;
     modifiedText: string;
     emails: string[];
-    dismissTimestamp?: number;
+    dismissedEmails?: {email: string, deadline: number}[];
 };
 
 export type LassoEmailDetails = {

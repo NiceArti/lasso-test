@@ -17,8 +17,9 @@ import { DismissEmailButton } from "./dismiss-email-button";
 export type IssueModalProps = {
     text?: string,
     history?: IssueHistoryItem[],
+    dismissedEmails?: { email: string, deadline: number }[],
     isOpen?: boolean,
-    onSubmit?: (emails: string[], originalText: string, modifiedText: string) => void;
+    onSubmit?: (emails: string[], dismissedEmails: {email: string, deadline: number}[], originalText: string, modifiedText: string) => void;
     onCancel?: () => void;
     onClearHistory?: () => void;
     onDismissEmail24h?: (dismiss: boolean, email: string) => void;
@@ -29,15 +30,22 @@ export function IssueModal({
     text = "",
     history = [],
     isOpen = false,
+    dismissedEmails,
     onSubmit,
     onCancel,
     onClearHistory,
     onDismissEmail24h,
 }: IssueModalProps) {
-    const { initialModifiedText, emailCount, emails } = useMemo(() => {
+    const {
+        initialModifiedText,
+        emailCount,
+        emails,
+        dismissedEmailsInText,
+    } = useMemo(() => {
         if (!text) {
             return {
                 emails: [],
+                dismissedEmailsInText: [],
                 initialModifiedText: "",
                 emailCount: 0,
             };
@@ -45,15 +53,44 @@ export function IssueModal({
 
         const matches = text.match(EMAIL_REGEX) ?? [];
 
+        const dismissedMap = new Map(
+            (dismissedEmails ?? []).map(d => [
+                d.email.toLowerCase().trim(),
+                d.deadline,
+            ])
+        );
+
+        const filteredEmails: string[] = [];
+        const dismissedFound: { email: string; deadline: number }[] = [];
+
+        for (const email of matches) {
+            const normalized = email.toLowerCase().trim();
+            const deadline = dismissedMap.get(normalized);
+
+            if (typeof deadline === "number") {
+                dismissedFound.push({ email, deadline });
+            } else {
+                filteredEmails.push(email);
+            }
+        }
+
+        // маскируем только non-dismissed
+        const modifiedText = text.replace(EMAIL_REGEX, (match) => {
+            const normalized = match.toLowerCase().trim();
+            return dismissedMap.has(normalized)
+                ? match
+                : TEMPLATE_EMAIL;
+        });
+
         return {
-            initialModifiedText: text.replace(
-                EMAIL_REGEX,
-                TEMPLATE_EMAIL
-            ),
-            emailCount: matches.length,
-            emails: matches,
+            initialModifiedText: modifiedText,
+            emailCount: filteredEmails.length,
+            emails: filteredEmails,
+            dismissedEmailsInText: dismissedFound, // ✅ ВАЖНО
         };
-    }, [text]);
+    }, [text, dismissedEmails]);
+
+
 
     const [modifiedText, setModifiedText] = useState<string>(initialModifiedText);
 
@@ -159,76 +196,94 @@ export function IssueModal({
                                     No issues detected yet
                                 </p>
                             ) : (
-                                history.map((item, index) => (
-                                    <div
-                                        key={index}
-                                        className="rounded-md border border-white/10 bg-[#1e1e1e] p-3 space-y-2"
-                                    >
+                                history.map((item) => {
 
-                                        {/* Header */}
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs text-white/50">
-                                                {new Date(item.timestamp).toLocaleString()}
-                                            </span>
-                                            <span className="text-xs text-white/40">
-                                                {item.emails.length} email(s)
-                                            </span>
-                                        </div>
+                                    const dismissedMap = new Map(
+                                        item.dismissedEmails?.map(d => [
+                                            d.email.toLowerCase().trim(),
+                                            d.deadline,
+                                        ])
+                                    );
 
-                                        {/* Dismissed emails */}
-                                        {typeof item.dismissTimestamp === "number" &&
-                                            item.dismissTimestamp > Date.now() && (
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className="rounded-md border border-white/10 bg-[#1e1e1e] p-3 space-y-2"
+                                        >
+                                            {/* Header */}
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs text-white/50">
+                                                    {new Date(item.timestamp).toLocaleString()}
+                                                </span>
+                                                <span className="text-xs text-white/40">
+                                                    {item.emails.length} email(s)
+                                                </span>
+                                            </div>
+
+                                            {/* Emails (all) */}
+                                            <div className="space-y-1">
+                                                <span className="text-xs text-white/50 block">
+                                                    Emails
+                                                </span>
+
                                                 <div className="space-y-1">
-                                                    <span className="text-xs text-white/50 block">
-                                                        Dismissed emails
-                                                    </span>
+                                                    {item.emails.map((email) => {
+                                                        const normalized = email.toLowerCase().trim();
+                                                        const deadline = dismissedMap.get(normalized);
 
-                                                    <div className="space-y-1">
-                                                        {item.emails.map((email) => (
+                                                        return (
                                                             <div
                                                                 key={email}
                                                                 className="flex items-center gap-2 text-xs"
                                                             >
-                                                                <span className="line-through text-white/30">
+                                                                <span
+                                                                    className={
+                                                                        deadline
+                                                                            ? "line-through text-white/30"
+                                                                            : "text-white"
+                                                                    }
+                                                                >
                                                                     {email}
                                                                 </span>
 
-                                                                <span className="text-[10px] text-yellow-500">
-                                                                    dismissed until{" "}
-                                                                    {new Date(
-                                                                        item.dismissTimestamp!
-                                                                    ).toLocaleTimeString()}
-                                                                </span>
+                                                                {deadline && (
+                                                                    <span className="text-[10px] text-yellow-500">
+                                                                        dismissed until{" "}
+                                                                        {new Date(deadline).toLocaleTimeString()}
+                                                                    </span>
+                                                                )}
                                                             </div>
-                                                        ))}
-                                                    </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                            )}
+                                            </div>
 
+                                            {/* Modified */}
+                                            <div className="text-sm text-white">
+                                                <span className="text-xs text-white/50 block mb-1">
+                                                    Modified
+                                                </span>
+                                                <div className="whitespace-pre-wrap rounded bg-[#2a2a2a] p-2">
+                                                    {item.modifiedText ?? "[EMAIL_ADDRESS]"}
+                                                </div>
+                                            </div>
 
-                                        {/* Modified */}
-                                        <div className="text-sm text-white">
-                                            <span className="text-xs text-white/50 block mb-1">
-                                                Modified
-                                            </span>
-                                            <div className="whitespace-pre-wrap rounded bg-[#2a2a2a] p-2">
-                                                {item.modifiedText ?? "[EMAIL_ADDRESS]"}
+                                            {/* Original */}
+                                            <div className="text-sm text-white/40">
+                                                <span className="text-xs block mb-1">
+                                                    Original
+                                                </span>
+                                                <div className="whitespace-pre-wrap rounded bg-[#151515] p-2">
+                                                    {item.originalText ?? "-"}
+                                                </div>
                                             </div>
                                         </div>
+                                    );
+                                })
 
-                                        {/* Original */}
-                                        <div className="text-sm text-white/40">
-                                            <span className="text-xs block mb-1">
-                                                Original
-                                            </span>
-                                            <div className="whitespace-pre-wrap rounded bg-[#151515] p-2">
-                                                {item.originalText ?? "-"}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
                             )}
                         </div>
+
                     </TabsContent>
 
 
@@ -246,7 +301,14 @@ export function IssueModal({
                         <Button
                             disabled={emailCount === 0}
                             onClick={() => {
-                                onSubmit?.(emails, text, modifiedText,)
+                                onSubmit?.(
+                                    dismissedEmailsInText ?
+                                        [...emails, ...dismissedEmailsInText.map(item => item.email)] :
+                                        emails,
+                                    dismissedEmails ?? [],
+                                    text,
+                                    modifiedText
+                                )
                             }}
                             className="bg-white text-black hover:bg-white/90"
                         >

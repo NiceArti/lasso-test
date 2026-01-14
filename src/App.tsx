@@ -56,10 +56,9 @@ export default function App() {
     emails,
     text,
     history,
+    dismissedEmails,
     setHistory,
   } = useApp();
-
-
   const [open, setOpen] = useState(false);
 
 
@@ -101,13 +100,14 @@ export default function App() {
     });
   }
 
-  const handleSubmit = (emails: string[], originalText: string, modifiedText: string) => {
+  const handleSubmit = (emails: string[], dismissedEmails: {email: string, deadline: number}[], originalText: string, modifiedText: string) => {
     const issue = {
       id: crypto.randomUUID(),
       timestamp: Date.now(),
       originalText,
       modifiedText,
       emails,
+      dismissedEmails,
     };
 
     storeEmails(
@@ -146,6 +146,7 @@ export default function App() {
       isOpen={open}
       text={text}
       history={history}
+      dismissedEmails={dismissedEmails}
       onCancel={handleClose}
       onSubmit={handleSubmit}
       onClearHistory={handleClearHistory}
