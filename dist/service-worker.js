@@ -1,0 +1,1 @@
+chrome.runtime.onMessage.addListener((i,c,a)=>{if(i.type==="GET_DISMISSED_EMAILS")return chrome.storage.local.get(["dismissed_email"],r=>{const m=r.dismissed_email??{},n=Date.now(),s={},t=[];for(const[o,e]of Object.entries(m))typeof e=="number"&&e>=n&&(s[o]=e,t.push(o));chrome.storage.local.set({dismissed_email:s}),a(t)}),!0});
